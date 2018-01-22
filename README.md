@@ -3,7 +3,7 @@ Package `fsync` keeps files and directories in sync.
 fork&modify from
 [fsync](https://github.com/mostafah/fsync).
 
-![demo](https://github.com/labrusca/fsync/images/show.gif)
+![demo](https://github.com/labrusca/fsync/blob/master/images/show.gif)
 
  Add ```Syncer.Output bool```:
 ```
