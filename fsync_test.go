@@ -45,7 +45,7 @@ func TestSync(t *testing.T) {
 	testModTime("dst/c", getModTime("src/c"), t)
 
 	// sync the parent directory too
-	check(s.Sync("dst", "src"))
+	check(s.Sync("src", "dst"))
 
 	// check the results
 	testPerms("dst", getPerms("src"), t)
@@ -56,7 +56,7 @@ func TestSync(t *testing.T) {
 	check(os.Chmod("src/a", 0775))
 
 	// sync
-	check(s.Sync("dst", "src"))
+	check(s.Sync("src", "dst"))
 
 	// check results
 	testFile("dst/a/b", []byte("file b changed"), t)
@@ -70,7 +70,7 @@ func TestSync(t *testing.T) {
 	check(os.Remove("src/c"))
 
 	// sync
-	check(s.Sync("dst", "src"))
+	check(s.Sync("src", "dst"))
 
 	// check results; c should still exist
 	testDirContents("dst", 2, t)
@@ -78,14 +78,14 @@ func TestSync(t *testing.T) {
 
 	// sync
 	s.Delete = true
-	check(s.Sync("dst", "src"))
+	check(s.Sync("src", "dst"))
 
 	// check results; c should no longer exist
 	testDirContents("dst", 1, t)
 	testExistence("dst/c", false, t)
 
 	s.Delete = false
-	if err = s.Sync("dst", "src/a/b"); err == nil {
+	if err = s.Sync("src/a/b", "dst"); err == nil {
 		t.Errorf("expecting ErrFileOverDir, got nothing.\n")
 	} else if err != nil && err != ErrFileOverDir {
 		panic(err)

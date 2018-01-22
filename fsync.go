@@ -1,6 +1,6 @@
 // package fsync keeps two files or directories in sync.
 //
-//         err := fsync.Sync("~/dst", ".")
+//         err := fsync.Sync(".", "~/dst")
 //
 // After the above code, if err is nil, every file and directory in the current
 // directory is copied to ~/dst and has the same permissions. Consequent calls
@@ -13,10 +13,10 @@
 //
 // is equivalient to calling
 //
-//     Sync("public/app.js", "build/app.js")
-//     Sync("public/app.css", "build/app.css")
-//     Sync("public/images", "images")
-//     Sync("public/fonts", "fonts")
+//     Sync("build/app.js", "public/app.js")
+//     Sync("build/app.css", "public/app.css")
+//     Sync("images", "public/images")
+//     Sync("fonts", "public/fonts")
 //
 // Actually, this is how SyncTo is implemented: consequent calls to Sync.
 //
@@ -28,6 +28,7 @@ package fsync
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -41,8 +42,8 @@ var (
 )
 
 // Sync copies files and directories inside src into dst.
-func Sync(dst, src string) error {
-	return NewSyncer().Sync(dst, src)
+func Sync(src, dst string) error {
+	return NewSyncer().Sync(src, dst)
 }
 
 // SyncTo syncs srcs files and directories into to directory.
@@ -58,6 +59,8 @@ type Syncer struct {
 	// By default, modification times are synced. This can be turned off by
 	// setting this to true.
 	NoTimes bool
+	// Output each file name during sync.
+	Output bool
 	// TODO add options for not checking content for equality
 }
 
@@ -67,26 +70,26 @@ func NewSyncer() *Syncer {
 }
 
 // Sync copies files and directories inside src into dst.
-func (s *Syncer) Sync(dst, src string) error {
+func (s *Syncer) Sync(src, dst string) error {
 	// make sure src exists
 	if _, err := os.Stat(src); err != nil {
 		return err
 	}
 	// return error instead of replacing a non-empty directory with a file
-	if b, err := s.checkDir(dst, src); err != nil {
+	if b, err := s.checkDir(src, dst); err != nil {
 		return err
 	} else if b {
 		return ErrFileOverDir
 	}
 
-	return s.syncRecover(dst, src)
+	return s.syncRecover(src, dst)
 }
 
 // SyncTo syncs srcs files or directories into to directory.
 func (s *Syncer) SyncTo(to string, srcs ...string) error {
 	for _, src := range srcs {
 		dst := filepath.Join(to, filepath.Base(src))
-		if err := s.Sync(dst, src); err != nil {
+		if err := s.Sync(src, dst); err != nil {
 			return err
 		}
 	}
@@ -94,7 +97,7 @@ func (s *Syncer) SyncTo(to string, srcs ...string) error {
 }
 
 // syncRecover handles errors and calls sync
-func (s *Syncer) syncRecover(dst, src string) (err error) {
+func (s *Syncer) syncRecover(src, dst string) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(runtime.Error); ok {
@@ -104,14 +107,14 @@ func (s *Syncer) syncRecover(dst, src string) (err error) {
 		}
 	}()
 
-	s.sync(dst, src)
+	s.sync(src, dst)
 	return nil
 }
 
 // sync updates dst to match with src, handling both files and directories.
-func (s *Syncer) sync(dst, src string) {
+func (s *Syncer) sync(src, dst string) {
 	// sync permissions and modification times after handling content
-	defer s.syncstats(dst, src)
+	defer s.syncstats(src, dst)
 
 	// read files info
 	dstat, err := os.Stat(dst)
@@ -173,8 +176,11 @@ func (s *Syncer) sync(dst, src string) {
 	for _, file := range files {
 		dst2 := filepath.Join(dst, file.Name())
 		src2 := filepath.Join(src, file.Name())
-		s.sync(dst2, src2)
+		s.sync(src2, dst2)
 		m[file.Name()] = true
+		if s.Output {
+			fmt.Println("+ ",file.Name())
+		}
 	}
 
 	// delete files from dst that does not exist in src
@@ -184,13 +190,14 @@ func (s *Syncer) sync(dst, src string) {
 		for _, file := range files {
 			if !m[file.Name()] {
 				check(os.RemoveAll(filepath.Join(dst, file.Name())))
+				fmt.Println("- ",file.Name())
 			}
 		}
 	}
 }
 
 // syncstats makes sure dst has the same pemissions and modification time as src
-func (s *Syncer) syncstats(dst, src string) {
+func (s *Syncer) syncstats(src, dst string) {
 	// get file infos; return if not exist and panic if error
 	dstat, err1 := os.Stat(dst)
 	sstat, err2 := os.Stat(src)
@@ -265,7 +272,7 @@ func (s *Syncer) equal(a, b string) bool {
 }
 
 // checkDir returns true if dst is a non-empty directory and src is a file
-func (s *Syncer) checkDir(dst, src string) (b bool, err error) {
+func (s *Syncer) checkDir(src, dst string) (b bool, err error) {
 	// read file info
 	dstat, err := os.Stat(dst)
 	if os.IsNotExist(err) {
